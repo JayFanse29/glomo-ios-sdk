@@ -29,6 +29,8 @@ The implementation sends the shared native SDK event contract directly to
 - `order_id` is the order ID, or the subscription ID for subscription checkouts, which also
   keep the same value in `subscription_id`.
 - `sdk_loaded` is sent once per checkout invocation with `integration` set to `ios_sdk`.
+- `$insert_id` is a fresh lowercase UUID on every event, so Mixpanel never deduplicates two
+  distinct events.
 - Requests are asynchronous, have a 10-second timeout, and do not retry.
 - Mixpanel derives coarse location from the request IP. The SDK privacy manifest declares
   coarse location and marks order-associated analytics data as linked to the user.

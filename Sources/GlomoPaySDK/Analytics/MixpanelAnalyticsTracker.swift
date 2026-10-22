@@ -83,6 +83,7 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
             "journey_id": sessionID,
             "$device_id": sessionID,
             "distinct_id": "$device:\(sessionID)",
+            "$insert_id": UUID().uuidString.lowercased(),
         ]) { _, new in new }
         common.merge(properties) { _, new in new }
         cacheNetworkSnapshot(from: properties)

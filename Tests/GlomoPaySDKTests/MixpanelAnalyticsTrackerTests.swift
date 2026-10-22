@@ -85,6 +85,31 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         }
     }
 
+    func testEveryEventGetsItsOwnLowercaseInsertID() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let tracker = MixpanelAnalyticsTracker(
+            config: GlomoPayConfig(publicKey: "test_public_key", orderId: "order_123"),
+            sessionID: "session-uuid",
+            sdkVersion: "1.0.0",
+            initialFlowType: "standard",
+            transport: transport,
+            errorReporter: NoOpSDKErrorReporter(),
+            deviceProperties: { [:] }
+        )
+
+        tracker.track(AnalyticsEventName.checkoutStarted)
+        tracker.track(AnalyticsEventName.checkoutStarted)
+
+        let first = try await transport.nextEvent().jsonProperties["$insert_id"] as? String
+        let second = try await transport.nextEvent().jsonProperties["$insert_id"] as? String
+        let insertIDs = try [XCTUnwrap(first), XCTUnwrap(second)]
+        XCTAssertNotEqual(insertIDs[0], insertIDs[1])
+        for insertID in insertIDs {
+            XCTAssertNotNil(UUID(uuidString: insertID))
+            XCTAssertEqual(insertID, insertID.lowercased())
+        }
+    }
+
     func testCheckoutURLIsSentWithoutItsQueryString() async throws {
         let config = GlomoPayConfig(publicKey: "test_public_key", orderId: "order_123")
         let url = try XCTUnwrap(
