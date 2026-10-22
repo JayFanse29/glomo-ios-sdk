@@ -345,6 +345,8 @@ final class CheckoutControllerTests: XCTestCase {
         }
         let starts = try await transport.waitForEvents(named: AnalyticsEventName.checkoutStarted, count: 2)
         let loaded = await transport.allEvents(named: AnalyticsEventName.sdkLoaded)
+        let failed = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        let closed = await transport.allEvents(named: AnalyticsEventName.sdkClosed)
         let resolved = try await transport.waitForEvents(named: AnalyticsEventName.checkoutURLResolved, count: 1)
 
         XCTAssertEqual(controller.currentURL, url)
@@ -364,7 +366,10 @@ final class CheckoutControllerTests: XCTestCase {
         XCTAssertNotNil(properties["$os_version"] as? String)
         XCTAssertNotNil(properties["$model"] as? String)
         XCTAssertEqual(properties["journey_id"] as? String, journeyID)
-        for event in starts + loaded {
+        XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["webview_error"])
+        XCTAssertEqual(failed.first?.jsonProperties["integration"] as? String, "ios_sdk")
+        XCTAssertTrue(closed.isEmpty)
+        for event in starts + loaded + failed {
             XCTAssertEqual(event.jsonProperties["journey_id"] as? String, journeyID)
             XCTAssertEqual(event.jsonProperties["$device_id"] as? String, journeyID)
             XCTAssertEqual(event.jsonProperties["distinct_id"] as? String, "$device:\(journeyID)")
@@ -392,6 +397,116 @@ final class CheckoutControllerTests: XCTestCase {
         XCTAssertNotEqual(firstID, secondID)
         XCTAssertEqual(firstLoaded.map { $0.jsonProperties["journey_id"] as? String }, [firstID])
         XCTAssertEqual(secondLoaded.map { $0.jsonProperties["journey_id"] as? String }, [secondID])
+    }
+
+    func testOpenTimeoutReportsSDKFailedWithTheJourneyID() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let controller = makeController(analyticsTransport: transport)
+
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.checkoutStarted, count: 1)
+        controller.reportOpenTimeout(reason: "render_timeout", budget: CheckoutOpenBudget.renderTimeout)
+        controller.reportOpenTimeout(reason: "watchdog", budget: CheckoutOpenBudget.watchdog)
+        let failed = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        let loaded = try await transport.waitForEvents(named: AnalyticsEventName.sdkLoaded, count: 1)
+
+        XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["open_timeout"])
+        XCTAssertEqual(
+            failed.first?.jsonProperties["journey_id"] as? String,
+            checkoutJourneyID(in: controller.currentURL)
+        )
+        XCTAssertEqual(
+            failed.first?.jsonProperties["journey_id"] as? String,
+            loaded.first?.jsonProperties["journey_id"] as? String
+        )
+    }
+
+    func testValidationFailureReportsSDKFailedAndClosesWithError() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let listener = RecordingCheckoutListener()
+        let controller = GlomoPayCheckoutViewController(
+            config: GlomoPayConfig(publicKey: "publishable_123456", orderId: "order_123456"),
+            orderType: "standard",
+            listener: listener,
+            apiClient: nil,
+            telemetryRuntime: SDKTelemetryRuntime(
+                configuration: .load(environment: [:], bundledValues: [:]),
+                mixpanelTransport: transport
+            )
+        )
+        controller.loadViewIfNeeded()
+
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        let failed = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        let closed = try await transport.waitForEvents(named: AnalyticsEventName.sdkClosed, count: 1)
+        let loaded = try await transport.waitForEvents(named: AnalyticsEventName.sdkLoaded, count: 1)
+
+        XCTAssertEqual(listener.errors.first?.type, .validationError)
+        XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["validation_failed"])
+        XCTAssertEqual(closed.map { $0.jsonProperties["trigger"] as? String }, ["error"])
+        XCTAssertNotNil(loaded.first?.jsonProperties["journey_id"] as? String)
+        for event in failed + closed {
+            XCTAssertEqual(
+                event.jsonProperties["journey_id"] as? String,
+                loaded.first?.jsonProperties["journey_id"] as? String
+            )
+        }
+    }
+
+    func testSDKClosedFiresOnceWithTheTriggerForEachWayTheCheckoutCloses() async throws {
+        let closes: [(trigger: String, close: (GlomoPayCheckoutViewController) -> Void)] = [
+            ("user_dismiss", { controller in
+                controller.presentationControllerDidDismiss(
+                    UIPresentationController(presentedViewController: controller, presenting: nil)
+                )
+            }),
+            ("merchant", { controller in controller.closeCheckout() }),
+            ("page", { controller in
+                controller.eventRouter.handle(envelope: ["type": "message", "data": ["type": "checkout.closed"]])
+            }),
+            ("completed", { controller in
+                controller.eventRouter.handle(envelope: [
+                    "type": "message",
+                    "data": [
+                        "type": "payment.success",
+                        "payload": ["orderId": "order_123456", "paymentId": "pay_123456", "signature": "signed"],
+                    ],
+                ])
+            }),
+            ("error", { [self] controller in
+                guard let main = self.webViews(in: controller.view).first else { return XCTFail("No main WebView") }
+                controller.webView(
+                    main,
+                    didFailProvisionalNavigation: nil,
+                    withError: NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet, userInfo: nil)
+                )
+            }),
+        ]
+
+        for (trigger, close) in closes {
+            let listener = RecordingCheckoutListener()
+            let transport = RecordingAnalyticsTransport()
+            let controller = makeController(listener: listener, analyticsTransport: transport)
+
+            close(controller)
+            controller.closeCheckout()
+            controller.presentationControllerDidDismiss(
+                UIPresentationController(presentedViewController: controller, presenting: nil)
+            )
+            _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkClosed, count: 1)
+            try await Task.sleep(nanoseconds: 500_000_000)
+            let closed = await transport.allEvents(named: AnalyticsEventName.sdkClosed)
+
+            XCTAssertEqual(closed.map { $0.jsonProperties["trigger"] as? String }, [trigger], trigger)
+            XCTAssertEqual(closed.first?.jsonProperties["integration"] as? String, "ios_sdk", trigger)
+            XCTAssertNotNil(closed.first?.jsonProperties["journey_id"] as? String, trigger)
+            if trigger == "error" {
+                let failed = await transport.allEvents(named: AnalyticsEventName.sdkFailed)
+                XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["connection_error"])
+            }
+        }
     }
 
     // MARK: - Order-type detection

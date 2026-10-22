@@ -243,6 +243,7 @@ enum GlomoPayResult {
     /// A completed non-payment journey. Terminal like the others, but never a payment result.
     case userJourney(GlomoPayUserJourneyPayload)
     case cancelled
+    case pageClosed
 }
 
 /// The SDK holds this weakly. Retain it for at least as long as the checkout, or its callbacks

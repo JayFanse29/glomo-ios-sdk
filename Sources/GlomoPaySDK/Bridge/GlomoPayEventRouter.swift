@@ -101,6 +101,7 @@ final class GlomoPayEventRouter {
         case "dependencies.failed_to_load":
             let message = envelope["message"] as? String ?? "Checkout dependencies failed to load"
             analytics.track(AnalyticsEventName.checkoutDependenciesFailed, properties: ["error_message": message])
+            analytics.trackSDKFailed(.dependenciesFailed)
             errorReporter.capture(
                 operation: "checkout_dependencies",
                 error: RouterError(message),
@@ -197,7 +198,7 @@ final class GlomoPayEventRouter {
             analytics.track(AnalyticsEventName.paymentTerminated, properties: [
                 "termination_source": "checkout_closed",
             ])
-            complete(.cancelled, termination: .userDismiss)
+            complete(.pageClosed, termination: .userDismiss)
         // No `glomoCheckoutJourneyTerminate` case. Pay-via-bank is sunset and unsupported on iOS:
         // the event used to be tracked as Pay Via Bank Completed with no callback, no payload type
         // and no enum member behind it, which made a dashboard show a live-looking signal for a
@@ -246,7 +247,7 @@ final class GlomoPayEventRouter {
                 if let payload { listener.onPaymentFailure(payload) }
             case .userJourney(let journey):
                 listener.onUserJourneyCompleted(journey)
-            case .cancelled:
+            case .cancelled, .pageClosed:
                 listener.onPaymentTerminate(termination ?? .userDismiss)
             }
         }

@@ -110,6 +110,41 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         }
     }
 
+    func testSDKClosedAndSDKFailedCarryIntegrationAndIdentity() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let tracker = MixpanelAnalyticsTracker(
+            config: GlomoPayConfig(publicKey: "test_public_key", orderId: "order_123"),
+            sessionID: "01d245ac-f936-4545-9013-7114243e312f",
+            sdkVersion: "1.2.3",
+            initialFlowType: "standard",
+            transport: transport,
+            errorReporter: NoOpSDKErrorReporter(),
+            deviceProperties: {
+                ["$os": "iOS", "$os_version": "18.5", "$model": "iPhone17,3"]
+            }
+        )
+
+        tracker.trackSDKClosed(.merchant)
+        tracker.trackSDKFailed(.openTimeout)
+
+        let closed = try await transport.waitForEvents(named: "sdk_closed", count: 1)
+        let failed = try await transport.waitForEvents(named: "sdk_failed", count: 1)
+        XCTAssertEqual(closed.first?.jsonProperties["trigger"] as? String, "merchant")
+        XCTAssertEqual(failed.first?.jsonProperties["error_code"] as? String, "open_timeout")
+        for properties in (closed + failed).map(\.jsonProperties) {
+            XCTAssertEqual(properties["integration"] as? String, "ios_sdk")
+            XCTAssertEqual(properties["journey_id"] as? String, "01d245ac-f936-4545-9013-7114243e312f")
+            XCTAssertEqual(properties["$device_id"] as? String, "01d245ac-f936-4545-9013-7114243e312f")
+            XCTAssertEqual(properties["distinct_id"] as? String, "$device:01d245ac-f936-4545-9013-7114243e312f")
+            XCTAssertNotNil(properties["$insert_id"] as? String)
+            XCTAssertEqual(properties["sdk_version"] as? String, "1.2.3")
+            XCTAssertEqual(properties["platform"] as? String, "ios")
+            XCTAssertEqual(properties["$os"] as? String, "iOS")
+            XCTAssertEqual(properties["$os_version"] as? String, "18.5")
+            XCTAssertEqual(properties["$model"] as? String, "iPhone17,3")
+        }
+    }
+
     func testCheckoutURLIsSentWithoutItsQueryString() async throws {
         let config = GlomoPayConfig(publicKey: "test_public_key", orderId: "order_123")
         let url = try XCTUnwrap(
