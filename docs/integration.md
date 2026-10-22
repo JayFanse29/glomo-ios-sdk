@@ -29,14 +29,6 @@ The implementation sends the shared native SDK event contract directly to
 - `order_id` is the order ID, or the subscription ID for subscription checkouts, which also
   keep the same value in `subscription_id`.
 - `sdk_loaded` is sent once per checkout invocation with `integration` set to `ios_sdk`.
-- `sdk_closed` is sent once per checkout invocation when the checkout goes away, with `trigger`:
-  `user_dismiss`, `merchant` (`close()` on the handle, or the host dismissing the checkout),
-  `page` (the page sent `checkout.closed`), `completed` (a terminal payment or journey result) or
-  `error` (including Cancel on the connection-error panel).
-- `sdk_failed` is sent once per open attempt while the checkout is still opening (a retry
-  re-arms it; the first cause wins), with `error_code`: `open_timeout`,
-  `connection_error`, `webview_error`, `http_error`, `validation_failed`,
-  `order_type_detection_failed`, `compliance_blocked`, `dependencies_failed` or `start_failed`.
 - `$insert_id` is a fresh lowercase UUID on every event, so Mixpanel never deduplicates two
   distinct events.
 - Requests are asynchronous, have a 10-second timeout, and do not retry.

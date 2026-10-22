@@ -29,8 +29,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
     private var didRetryAfterProcessTermination = false
     private var didTerminate = false
     private var didTrackSDKInitialization = false
-    private var didTrackSDKClosed = false
-    private var didReportSDKFailure = false
     private var progressObservation: NSKeyValueObservation?
     private var bridgeHandler: GlomoPayJavaScriptBridge?
     private var flowBridgeHandler: GlomoPayJavaScriptBridge?
@@ -138,7 +136,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             onWindowOpen: { [weak self] url in self?.openFlow(url) },
             onWindowClose: { [weak self] in self?.closeFlow() },
             onBridgeReady: { [weak self] in self?.markBridgeReady() },
-            onMainDependenciesFailed: { [weak self] in self?.reportSDKFailed(.dependenciesFailed) },
             analytics: analytics,
             errorReporter: errorReporter
         )
@@ -165,12 +162,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
     public override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         progressObservation?.invalidate()
-        let isLeaving = isBeingDismissed || isMovingFromParent || navigationController?.isBeingDismissed == true
-        guard isLeaving, !didTerminate else { return }
-        DispatchQueue.main.async { [self] in
-            guard !didTerminate else { return }
-            trackSDKClosed(.merchant)
-        }
     }
 
     deinit {
@@ -339,11 +330,11 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                 message: GlomoPayStrings.checkoutTakingLonger,
                 failedURL: self.currentURL,
                 shouldAutoClose: false
-            ), failure: .connectionError)
+            ))
         }
     }
 
-    func reportOpenTimeout(reason: String, budget: TimeInterval) {
+    private func reportOpenTimeout(reason: String, budget: TimeInterval) {
         guard let lastStep = openFunnel.timeout() else { return }
         analytics.track(AnalyticsEventName.checkoutOpenTimeout, properties: [
             "last_step": lastStep,
@@ -351,7 +342,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             "timeout_ms": Int(budget * 1_000),
             "elapsed_ms": openStartedAt.map { Int(Date().timeIntervalSince($0) * 1_000) },
         ])
-        reportSDKFailed(.openTimeout)
     }
 
     private func markBridgeReady() {
@@ -394,7 +384,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             var properties = performanceSnapshotCollector?.collect()
                 ?? DevicePerformanceSnapshot.emptyProperties
             analytics.track(AnalyticsEventName.sdkInitialized, properties: properties)
-            analytics.trackSDKLoaded()
+            analytics.track(AnalyticsEventName.sdkLoaded, properties: ["integration": "ios_sdk"])
         }
         let errors = Validator.validate(config: config)
         guard errors.isEmpty else {
@@ -402,7 +392,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                 "failure_reason": validationFailureReason(errors.first),
                 "error_message": errors.first?.message,
             ])
-            reportSDKFailed(.validationFailed)
             deliverSdkErrors(errors)
             return
         }
@@ -417,7 +406,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         guard compliance.isCompliant else {
             let blockReason = compliance.isDebuggerAttached ? "debugger_attached" : "jailbreak_detected"
             analytics.track(AnalyticsEventName.deviceComplianceBlocked, properties: ["block_reason": blockReason])
-            reportSDKFailed(.complianceBlocked)
             let message = compliance.isDebuggerAttached
                 ? "Device is being debugged."
                 : "Device is rooted or jailbroken."
@@ -432,10 +420,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             guard let type = await self.resolveOrderType() else { return }
             guard !self.didTerminate else { return }
             guard let url = ConfigManager.getCheckoutURL(self.config, orderType: type, journeyID: self.sessionID) else {
-                await self.showConnectionError(
-                    ConnectionError(type: .unknown, message: "Unable to build checkout URL"),
-                    failure: .startFailed
-                )
+                await self.showConnectionError(ConnectionError(type: .unknown, message: "Unable to build checkout URL"))
                 return
             }
             self.loadCheckout(url: url, orderType: type)
@@ -475,7 +460,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                 // which shipped an order payload to Mixpanel unredacted.
                 "failure_reason": reason,
             ])
-            reportSDKFailed(.orderTypeDetectionFailed)
             errorReporter.capture(
                 operation: "order_type_detection",
                 error: error,
@@ -663,7 +647,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             if webView === flowWebView {
                 showFlowError(error)
             } else {
-                deliverConnectionError(error, failure: SDKFailureCode(error.type))
+                deliverConnectionError(error)
             }
         }
         decisionHandler(.allow)
@@ -735,7 +719,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             failedURL: url,
             domain: nsError.domain
         )
-        deliverConnectionError(connectionError, failure: SDKFailureCode(connectionError.type))
+        deliverConnectionError(connectionError)
     }
 
     private func openFlow(_ url: URL) {
@@ -785,7 +769,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             forMainFrameOnly: false
         ))
         let flowBridge = GlomoPayJavaScriptBridge { [weak self] body in
-            DispatchQueue.main.async { self?.eventRouter.handle(body: body, source: .flow) }
+            DispatchQueue.main.async { self?.eventRouter.handle(body: body) }
         }
         flowBridgeHandler = flowBridge
         userContentController.add(flowBridge, name: "GlomoPayFlowBridge")
@@ -1120,24 +1104,22 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         didTerminate = true
         cancelOpenWatchdogs()
         closeFlow()
-        trackSDKClosed(SDKCloseTrigger(result))
         switch result {
-        case .success, .failure, .userJourney, .cancelled, .pageClosed:
+        case .success, .failure, .userJourney, .cancelled:
             flushTerminalErrorReports()
             dismiss(animated: true)
         }
     }
 
-    private func showConnectionError(_ error: ConnectionError, failure: SDKFailureCode) async {
-        await MainActor.run { self.deliverConnectionError(error, failure: failure) }
+    private func showConnectionError(_ error: ConnectionError) async {
+        await MainActor.run { self.deliverConnectionError(error) }
     }
 
-    private func deliverConnectionError(_ error: ConnectionError, failure: SDKFailureCode) {
+    private func deliverConnectionError(_ error: ConnectionError) {
         guard !didTerminate else { return }
         loadingView.isHidden = true
         progressView.isHidden = true
         analytics.track(AnalyticsEventName.connectionError, properties: connectionErrorProperties(error))
-        reportSDKFailed(failure)
         errorReporter.capture(
             operation: "webview_connection",
             error: error,
@@ -1157,7 +1139,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             // descriptions are not localised or useful as customer-facing checkout copy.
             message: GlomoPayStrings.connectionErrorMessage(for: error.type),
             retry: #selector(retryTapped),
-            cancel: #selector(errorPanelCancelTapped)
+            cancel: #selector(closeTapped)
         )
         view.addSubview(panel)
         NSLayoutConstraint.activate([
@@ -1231,9 +1213,13 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         // A retry is a new open attempt: it gets its own funnel and its own timeout budget,
         // otherwise the second attempt could never report a timeout of its own.
         openFunnel = CheckoutOpenFunnel()
-        didReportSDKFailure = false
+        guard let currentURL else {
+            didStartCheckout = false
+            startCheckout()
+            return
+        }
         startOpenWatchdog()
-        currentURL.map { loadCheckout(url: $0, orderType: orderTypeForCurrentCheckoutLoad()) }
+        loadCheckout(url: currentURL, orderType: orderTypeForCurrentCheckoutLoad())
     }
 
     func orderTypeForCurrentCheckoutLoad() -> String {
@@ -1242,10 +1228,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
 
     @objc private func closeTapped() {
         terminate(source: .userDismiss)
-    }
-
-    @objc private func errorPanelCancelTapped() {
-        terminate(source: .userDismiss, closeTrigger: .error)
     }
 
     /// Dismisses this checkout from host code. Safe to call more than once; after the checkout
@@ -1278,14 +1260,13 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         return true
     }
 
-    private func terminate(source: TerminationSource, closeTrigger: SDKCloseTrigger? = nil) {
+    private func terminate(source: TerminationSource) {
         guard !didTerminate else { return }
         didTerminate = true
         cancelOpenWatchdogs()
         analytics.track(AnalyticsEventName.paymentTerminated, properties: [
             "termination_source": analyticsTerminationSource(source),
         ])
-        trackSDKClosed(closeTrigger ?? SDKCloseTrigger(source))
         deliverToListener { $0.onPaymentTerminate(source) }
         flushTerminalErrorReports()
         dismiss(animated: true)
@@ -1293,7 +1274,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
 
     private func deliverSdkErrors(_ errors: [SdkError]) {
         didTerminate = true
-        trackSDKClosed(.error)
         analytics.track(AnalyticsEventName.sdkError, properties: [
             "error_count": errors.count,
             "errors": SDKErrorAnalyticsSerializer.serialize(errors),
@@ -1304,18 +1284,6 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         deliverToListener { $0.onSdkError(errors) }
         flushTerminalErrorReports()
         dismiss(animated: true)
-    }
-
-    private func reportSDKFailed(_ code: SDKFailureCode) {
-        guard !didReportSDKFailure, !openFunnel.didOpen else { return }
-        didReportSDKFailure = true
-        analytics.trackSDKFailed(code)
-    }
-
-    private func trackSDKClosed(_ trigger: SDKCloseTrigger) {
-        guard !didTrackSDKClosed else { return }
-        didTrackSDKClosed = true
-        analytics.trackSDKClosed(trigger)
     }
 
     private func flushTerminalErrorReports() {
@@ -1366,7 +1334,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                 type: .unknown,
                 message: "The checkout WebView stopped unexpectedly.",
                 failedURL: currentURL
-            ), failure: .webViewError)
+            ))
         }
     }
 

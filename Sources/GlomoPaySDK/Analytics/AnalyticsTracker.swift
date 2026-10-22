@@ -24,8 +24,6 @@ final class NoOpAnalyticsTracker: AnalyticsTracking {
 enum AnalyticsEventName {
     static let sdkInitialized = "SDK Initialized"
     static let sdkLoaded = "sdk_loaded"
-    static let sdkClosed = "sdk_closed"
-    static let sdkFailed = "sdk_failed"
     static let sdkValidationFailed = "SDK Validation Failed"
     static let deviceComplianceChecked = "Device Compliance Checked"
     static let deviceComplianceBlocked = "Device Compliance Blocked"
@@ -80,5 +78,4 @@ enum AnalyticsEventName {
 
 enum GlomoPaySDKBuild {
     static let version = "1.0.0"
-    static let integration = "ios_sdk"
 }
