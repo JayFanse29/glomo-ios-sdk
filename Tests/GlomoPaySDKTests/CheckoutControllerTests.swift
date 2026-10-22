@@ -375,6 +375,72 @@ final class CheckoutControllerTests: XCTestCase {
             XCTAssertEqual(event.jsonProperties["distinct_id"] as? String, "$device:\(journeyID)")
             XCTAssertEqual(event.jsonProperties["order_id"] as? String, "order_123456")
         }
+
+        failMainNavigation(of: controller, with: NSError(domain: "WKErrorDomain", code: 3, userInfo: nil))
+        let failedAfterRetry = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 2)
+        XCTAssertEqual(
+            failedAfterRetry.map { $0.jsonProperties["error_code"] as? String },
+            ["webview_error", "webview_error"]
+        )
+    }
+
+    func testMainFrameErrorAfterBridgeReadyIsNotAnSDKFailure() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let controller = makeController(analyticsTransport: transport)
+
+        controller.beginAppearanceTransition(true, animated: false)
+        controller.endAppearanceTransition()
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.checkoutStarted, count: 1)
+        controller.eventRouter.handle(envelope: ["type": "bridge.ready"])
+        failMainNavigation(of: controller, with: NSError(domain: "WKErrorDomain", code: 3, userInfo: nil))
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.connectionError, count: 1)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let failed = await transport.allEvents(named: AnalyticsEventName.sdkFailed)
+
+        XCTAssertTrue(failed.isEmpty)
+    }
+
+    func testMainDependencyFailureIsAnSDKFailureAndAFlowOneIsNot() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let controller = makeController(analyticsTransport: transport)
+
+        controller.eventRouter.handle(envelope: ["type": "dependencies.failed_to_load"], source: .flow)
+        controller.eventRouter.handle(envelope: ["type": "dependencies.failed_to_load"], source: .main)
+        let dependencyEvents = try await transport.waitForEvents(
+            named: AnalyticsEventName.checkoutDependenciesFailed,
+            count: 2
+        )
+        let failed = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let allFailed = await transport.allEvents(named: AnalyticsEventName.sdkFailed)
+
+        XCTAssertEqual(dependencyEvents.count, 2)
+        XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["dependencies_failed"])
+        XCTAssertEqual(allFailed.count, 1)
+    }
+
+    func testErrorPanelCancelClosesWithTheErrorTrigger() async throws {
+        let listener = RecordingCheckoutListener()
+        let transport = RecordingAnalyticsTransport()
+        let controller = makeController(autoClose: false, listener: listener, analyticsTransport: transport)
+
+        failMainNavigation(
+            of: controller,
+            with: NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet, userInfo: nil)
+        )
+        let cancel = try XCTUnwrap(button(titled: GlomoPayStrings.cancel, in: controller.view))
+        for action in try XCTUnwrap(cancel.actions(forTarget: controller, forControlEvent: .touchUpInside)) {
+            controller.perform(NSSelectorFromString(action), with: cancel)
+        }
+        let closed = try await transport.waitForEvents(named: AnalyticsEventName.sdkClosed, count: 1)
+
+        XCTAssertEqual(closed.map { $0.jsonProperties["trigger"] as? String }, ["error"])
+        XCTAssertEqual(listener.terminations, [.userDismiss])
+    }
+
+    private func failMainNavigation(of controller: GlomoPayCheckoutViewController, with error: NSError) {
+        guard let main = webViews(in: controller.view).first else { return XCTFail("No main WebView") }
+        controller.webView(main, didFailProvisionalNavigation: nil, withError: error)
     }
 
     func testEachOpenGetsItsOwnJourneyID() async throws {
@@ -408,7 +474,11 @@ final class CheckoutControllerTests: XCTestCase {
         _ = try await transport.waitForEvents(named: AnalyticsEventName.checkoutStarted, count: 1)
         controller.reportOpenTimeout(reason: "render_timeout", budget: CheckoutOpenBudget.renderTimeout)
         controller.reportOpenTimeout(reason: "watchdog", budget: CheckoutOpenBudget.watchdog)
-        let failed = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        failMainNavigation(of: controller, with: NSError(domain: "WKErrorDomain", code: 3, userInfo: nil))
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.connectionError, count: 1)
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkFailed, count: 1)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let failed = await transport.allEvents(named: AnalyticsEventName.sdkFailed)
         let loaded = try await transport.waitForEvents(named: AnalyticsEventName.sdkLoaded, count: 1)
 
         XCTAssertEqual(failed.map { $0.jsonProperties["error_code"] as? String }, ["open_timeout"])
@@ -456,7 +526,7 @@ final class CheckoutControllerTests: XCTestCase {
     }
 
     func testSDKClosedFiresOnceWithTheTriggerForEachWayTheCheckoutCloses() async throws {
-        let closes: [(trigger: String, close: (GlomoPayCheckoutViewController) -> Void)] = [
+        let closes: [(trigger: String, close: @MainActor (GlomoPayCheckoutViewController) -> Void)] = [
             ("user_dismiss", { controller in
                 controller.presentationControllerDidDismiss(
                     UIPresentationController(presentedViewController: controller, presenting: nil)

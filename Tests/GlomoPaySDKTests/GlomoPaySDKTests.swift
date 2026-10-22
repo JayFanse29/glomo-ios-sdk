@@ -185,7 +185,6 @@ final class GlomoPaySDKTests: XCTestCase {
         XCTAssertEqual(analytics.names, [
             AnalyticsEventName.redirectOpened,
             AnalyticsEventName.checkoutDependenciesFailed,
-            AnalyticsEventName.sdkFailed,
             AnalyticsEventName.fileUploadRequested,
         ])
     }

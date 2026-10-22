@@ -1,5 +1,10 @@
 import Foundation
 
+enum GlomoPayBridgeSource {
+    case main
+    case flow
+}
+
 final class GlomoPayEventRouter {
     private weak var listener: GlomoPayListener?
     private let devMode: Bool
@@ -7,6 +12,7 @@ final class GlomoPayEventRouter {
     private let onWindowOpen: (URL) -> Void
     private let onWindowClose: () -> Void
     private let onBridgeReady: () -> Void
+    private let onMainDependenciesFailed: () -> Void
     private let analytics: AnalyticsTracking
     private let errorReporter: SDKErrorReporting
     private var terminalDelivered = false
@@ -18,6 +24,7 @@ final class GlomoPayEventRouter {
         onWindowOpen: @escaping (URL) -> Void = { _ in },
         onWindowClose: @escaping () -> Void = {},
         onBridgeReady: @escaping () -> Void = {},
+        onMainDependenciesFailed: @escaping () -> Void = {},
         analytics: AnalyticsTracking,
         errorReporter: SDKErrorReporting
     ) {
@@ -27,14 +34,15 @@ final class GlomoPayEventRouter {
         self.onWindowOpen = onWindowOpen
         self.onWindowClose = onWindowClose
         self.onBridgeReady = onBridgeReady
+        self.onMainDependenciesFailed = onMainDependenciesFailed
         self.analytics = analytics
         self.errorReporter = errorReporter
     }
 
-    func handle(body: Any) {
+    func handle(body: Any, source: GlomoPayBridgeSource = .main) {
         do {
             let envelope = try dictionary(from: body)
-            handle(envelope: envelope)
+            handle(envelope: envelope, source: source)
         } catch {
             let schema = bridgeBodySchema(body)
             analytics.track(AnalyticsEventName.invalidMessageReceived, properties: [
@@ -47,7 +55,7 @@ final class GlomoPayEventRouter {
         }
     }
 
-    func handle(envelope: [String: Any]) {
+    func handle(envelope: [String: Any], source: GlomoPayBridgeSource = .main) {
         guard let type = envelope["type"] as? String, !type.isEmpty else {
             emitError(message: "Bridge message is missing a type")
             return
@@ -101,7 +109,7 @@ final class GlomoPayEventRouter {
         case "dependencies.failed_to_load":
             let message = envelope["message"] as? String ?? "Checkout dependencies failed to load"
             analytics.track(AnalyticsEventName.checkoutDependenciesFailed, properties: ["error_message": message])
-            analytics.trackSDKFailed(.dependenciesFailed)
+            if source == .main { onMainDependenciesFailed() }
             errorReporter.capture(
                 operation: "checkout_dependencies",
                 error: RouterError(message),

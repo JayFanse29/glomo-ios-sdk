@@ -59,22 +59,28 @@ final class SDKLifecycleAnalyticsTests: XCTestCase {
         XCTAssertEqual(listener.terminations, [.userDismiss])
     }
 
-    func testDependencyFailureIsAlsoReportedAsSDKFailed() {
+    func testOnlyAMainWebViewDependencyFailureReachesTheSDKFailureHook() {
         let analytics = PropertyRecordingAnalytics()
+        var mainFailures = 0
         let router = GlomoPayEventRouter(
             listener: nil,
             devMode: false,
             onComplete: { _ in },
+            onMainDependenciesFailed: { mainFailures += 1 },
             analytics: analytics,
             errorReporter: NoOpSDKErrorReporter()
         )
+        let envelope: [String: Any] = ["type": "dependencies.failed_to_load", "message": "LRS data missing"]
 
-        router.handle(envelope: ["type": "dependencies.failed_to_load", "message": "LRS data missing"])
+        router.handle(envelope: envelope, source: .flow)
+        XCTAssertEqual(mainFailures, 0)
+        router.handle(envelope: envelope)
+        XCTAssertEqual(mainFailures, 1)
+        router.handle(body: #"{"type":"dependencies.failed_to_load"}"#, source: .flow)
 
-        let failed = analytics.events.filter { $0.name == AnalyticsEventName.sdkFailed }
-        XCTAssertEqual(failed.count, 1)
-        XCTAssertEqual(failed.first?.properties["error_code"] as? String, "dependencies_failed")
-        XCTAssertEqual(failed.first?.properties["integration"] as? String, "ios_sdk")
+        XCTAssertEqual(mainFailures, 1)
+        XCTAssertEqual(analytics.events.filter { $0.name == AnalyticsEventName.checkoutDependenciesFailed }.count, 3)
+        XCTAssertTrue(analytics.events.filter { $0.name == AnalyticsEventName.sdkFailed }.isEmpty)
     }
 }
 
