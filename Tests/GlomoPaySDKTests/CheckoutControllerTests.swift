@@ -345,8 +345,14 @@ final class CheckoutControllerTests: XCTestCase {
         }
         let starts = try await transport.waitForEvents(named: AnalyticsEventName.checkoutStarted, count: 2)
         let loaded = await transport.allEvents(named: AnalyticsEventName.sdkLoaded)
+        let resolved = try await transport.waitForEvents(named: AnalyticsEventName.checkoutURLResolved, count: 1)
 
         XCTAssertEqual(controller.currentURL, url)
+        for value in [resolved.first?.jsonProperties["url"], starts.first?.jsonProperties["checkout_url"]] {
+            let loggedURL = try XCTUnwrap(value as? String)
+            XCTAssertFalse(loggedURL.contains("?"))
+            XCTAssertFalse(loggedURL.contains("journeyId"))
+        }
         XCTAssertEqual(journeyID, journeyID.lowercased())
         XCTAssertNotNil(UUID(uuidString: journeyID))
         XCTAssertEqual(loaded.count, 1)

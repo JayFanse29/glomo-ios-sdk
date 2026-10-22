@@ -74,7 +74,7 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
             "order_id": analyticsOrderID,
             "subscription_id": config.subscriptionId,
             "public_key": config.publicKey,
-            "checkout_url": state.1?.absoluteString,
+            "checkout_url": AnalyticsSanitizer.navigationURL(state.1),
             "dev_mode": SDKBuildFlags.internalBuild,
             "mock_mode": ConfigManager.isTestOrMock(config.publicKey),
             "time": Int64(date.timeIntervalSince1970 * 1_000),

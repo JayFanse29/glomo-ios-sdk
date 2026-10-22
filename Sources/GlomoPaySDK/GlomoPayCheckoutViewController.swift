@@ -536,7 +536,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         analytics.updateFlowType(orderType)
         analytics.updateCheckoutURL(url)
         errorReporter.updateFlowType(orderType)
-        analytics.track(AnalyticsEventName.checkoutURLResolved, properties: ["url": url.absoluteString])
+        analytics.track(AnalyticsEventName.checkoutURLResolved, properties: ["url": AnalyticsSanitizer.navigationURL(url)])
         analytics.track(AnalyticsEventName.checkoutStarted)
         advanceOpenStep(.urlResolved)
         startRenderWatchdog()

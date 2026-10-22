@@ -85,6 +85,32 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         }
     }
 
+    func testCheckoutURLIsSentWithoutItsQueryString() async throws {
+        let config = GlomoPayConfig(publicKey: "test_public_key", orderId: "order_123")
+        let url = try XCTUnwrap(
+            ConfigManager.getCheckoutURL(config, journeyID: "01d245ac-f936-4545-9013-7114243e312f")
+        )
+        let transport = RecordingAnalyticsTransport()
+        let tracker = MixpanelAnalyticsTracker(
+            config: config,
+            sessionID: "01d245ac-f936-4545-9013-7114243e312f",
+            sdkVersion: "1.0.0",
+            initialFlowType: "standard",
+            transport: transport,
+            errorReporter: NoOpSDKErrorReporter(),
+            deviceProperties: { [:] }
+        )
+
+        tracker.updateCheckoutURL(url)
+        tracker.track(AnalyticsEventName.checkoutStarted)
+
+        let properties = try await transport.nextEvent().jsonProperties
+        let checkoutURL = try XCTUnwrap(properties["checkout_url"] as? String)
+        XCTAssertEqual(checkoutURL, "https://checkout.glomopay.com/")
+        XCTAssertFalse(checkoutURL.contains("?"))
+        XCTAssertFalse(checkoutURL.contains("journeyId"))
+    }
+
     func testSDKLoadedCarriesTheBorrowedPropertySourceFields() async throws {
         let transport = RecordingAnalyticsTransport()
         let tracker = MixpanelAnalyticsTracker(

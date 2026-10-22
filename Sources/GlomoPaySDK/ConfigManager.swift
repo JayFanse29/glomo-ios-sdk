@@ -12,11 +12,11 @@ public enum ConfigManager {
         return URL(string: value)
     }
 
-    public static func getCheckoutURL(
-        _ config: GlomoPayConfig,
-        orderType: String = "standard",
-        journeyID: String? = nil
-    ) -> URL? {
+    public static func getCheckoutURL(_ config: GlomoPayConfig, orderType: String = "standard") -> URL? {
+        getCheckoutURL(config, orderType: orderType, journeyID: nil)
+    }
+
+    static func getCheckoutURL(_ config: GlomoPayConfig, orderType: String = "standard", journeyID: String?) -> URL? {
         guard let baseURL = getBaseURL(config, orderType: orderType),
               var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
         var queryItems = [
