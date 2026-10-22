@@ -6,6 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/).
 Starting with 1.0.0, the public API follows Semantic Versioning. Breaking
 public API changes require a new major release.
 
+## [Unreleased]
+
+- Analytics events now carry `journey_id`, and the anonymous Mixpanel identity is now the per-open
+  journey id (`$device:<journey_id>`) instead of `order_id`.
+
 ## [1.0.0] - 2026-10-01
 
 - Minimum supported iOS is now 16.0 and distribution is Swift Package Manager only. CocoaPods

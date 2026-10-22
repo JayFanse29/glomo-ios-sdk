@@ -24,7 +24,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
     private(set) var loadingView: UIView!
     private var loadingLabel: UILabel!
     private var errorView: UIView?
-    private var currentURL: URL?
+    private(set) var currentURL: URL?
     private var didRetryMainDocument = false
     private var didRetryAfterProcessTermination = false
     private var didTerminate = false
@@ -384,6 +384,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             var properties = performanceSnapshotCollector?.collect()
                 ?? DevicePerformanceSnapshot.emptyProperties
             analytics.track(AnalyticsEventName.sdkInitialized, properties: properties)
+            analytics.track(AnalyticsEventName.sdkLoaded, properties: ["integration": "ios_sdk"])
         }
         let errors = Validator.validate(config: config)
         guard errors.isEmpty else {
@@ -418,7 +419,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             guard let self else { return }
             guard let type = await self.resolveOrderType() else { return }
             guard !self.didTerminate else { return }
-            guard let url = ConfigManager.getCheckoutURL(self.config, orderType: type) else {
+            guard let url = ConfigManager.getCheckoutURL(self.config, orderType: type, journeyID: self.sessionID) else {
                 await self.showConnectionError(ConnectionError(type: .unknown, message: "Unable to build checkout URL"))
                 return
             }

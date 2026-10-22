@@ -80,7 +80,9 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
             "time": Int64(date.timeIntervalSince1970 * 1_000),
             "timestamp": Self.formattedTimestamp(date),
             "session_id": sessionID,
-            "distinct_id": analyticsOrderID,
+            "journey_id": sessionID,
+            "$device_id": sessionID,
+            "distinct_id": "$device:\(sessionID)",
         ]) { _, new in new }
         common.merge(properties) { _, new in new }
         cacheNetworkSnapshot(from: properties)
