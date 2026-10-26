@@ -23,8 +23,10 @@ The implementation sends the shared native SDK event contract directly to
 
 - `session_id` is a lowercase UUID generated once per checkout invocation. The same value is
   sent as `journey_id` and `$device_id`, and appended to the checkout URL as `journeyId`.
-- `distinct_id` is `$device:<journey_id>`. Every event is anonymous; the SDK never identifies
-  a user.
+- `distinct_id` is `$device:<journey_id>`: the Mixpanel identity is anonymous and new for each
+  checkout open, and the SDK never calls identify. Events still carry order-linked identifiers
+  (`order_id`, `subscription_id`, `public_key`, `payment_id`), so the privacy manifest declares
+  this analytics data as linked to the user.
 - `sdk_source`, `platform`, and `surface` are `glomo-ios-sdk`, `ios`, and `ios-sdk`.
 - `order_id` is the order ID, or the subscription ID for subscription checkouts, which also
   keep the same value in `subscription_id`.

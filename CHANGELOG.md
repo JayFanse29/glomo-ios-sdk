@@ -10,7 +10,8 @@ public API changes require a new major release.
 
 - Analytics events now carry `journey_id`, and the anonymous Mixpanel identity is now the per-open
   journey id (`$device:<journey_id>`) instead of `order_id`. A new `sdk_loaded` event marks each
-  checkout open.
+  checkout invocation, before validation and device checks; refused opens are reported by
+  `SDK Validation Failed` / `Device Compliance Blocked`.
 
 ## [1.0.0] - 2026-10-01
 
