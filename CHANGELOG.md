@@ -23,6 +23,10 @@ public API changes require a new major release.
 
 ### Changed
 
+- Analytics events now carry `journey_id`, and the anonymous Mixpanel identity is now the per-open
+  journey id (`$device:<journey_id>`) instead of `order_id`. A new `sdk_loaded` event marks each
+  checkout invocation, before validation and device checks; refused opens are reported by
+  `SDK Validation Failed` / `Device Compliance Blocked`.
 - The checkout and carousel WebViews now have their `overrideUserInterfaceStyle` pinned to the
   scheme the checkout resolved. `WKWebView` reports `prefers-color-scheme` from its trait
   collection, which inherits the host app, so without this a page told `dark` would still match
@@ -125,8 +129,8 @@ public API changes require a new major release.
   A rejected URL is captured rather than dropped silently.
 - `NSURLErrorCancelled` is no longer reported as a connection error. WebKit delivers it routinely
   - superseded provisional navigations, client-side redirects, `stopLoading()` - and with
-  auto-close on it terminated live checkouts for a non-event. `closeFlow()` now clears the
-  navigation delegate before `stopLoading()`.
+    auto-close on it terminated live checkouts for a non-event. `closeFlow()` now clears the
+    navigation delegate before `stopLoading()`.
 - `shouldAutoClose` is decided from the mapped error type instead of the sign of the error code.
   Every `NSURLErrorDomain` code is negative and every `WKErrorDomain` code is positive, so the
   old rule closed on all unmapped iOS errors and exempted genuine WebKit failures.

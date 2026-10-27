@@ -13,7 +13,7 @@ public enum ConfigManager {
     }
 
     public static func getCheckoutURL(_ config: GlomoPayConfig, orderType: String = "standard") -> URL? {
-        getCheckoutURL(config, orderType: orderType, colorScheme: nil)
+        getCheckoutURL(config, orderType: orderType, journeyID: nil, colorScheme: nil)
     }
 
     /// `colorScheme` is the already-resolved scheme; `auto` never reaches here. Omitted when nil,
@@ -25,8 +25,9 @@ public enum ConfigManager {
     /// `GlomoPayInjectionScripts.colorScheme` is the live path.
     static func getCheckoutURL(
         _ config: GlomoPayConfig,
-        orderType: String,
-        colorScheme: ResolvedColorScheme?
+        orderType: String = "standard",
+        journeyID: String? = nil,
+        colorScheme: ResolvedColorScheme? = nil
     ) -> URL? {
         guard let baseURL = getBaseURL(config, orderType: orderType),
               var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
@@ -35,6 +36,9 @@ public enum ConfigManager {
             URLQueryItem(name: "publicKey", value: config.publicKey),
             URLQueryItem(name: "mode", value: getMode(config.publicKey)),
         ]
+        if let journeyID, !journeyID.isEmpty {
+            items.append(URLQueryItem(name: "journeyId", value: journeyID))
+        }
         // Three names for one concept, by design: the property is `appColorScheme`, the wire is
         // `colorScheme`, the page hook is `glomoSetColorScheme`. The README says so, so nobody
         // assumes the wire was renamed with the property.
