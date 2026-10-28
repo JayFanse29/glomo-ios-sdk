@@ -390,8 +390,6 @@ final class CheckoutControllerTests: XCTestCase {
         XCTAssertEqual(secondLoaded.map { $0.jsonProperties["journey_id"] as? String }, [secondID])
     }
 
-    // MARK: - Analytics lifecycle
-
     func testLifecycle() async throws {
         let listener = RecordingCheckoutListener()
         let transport = RecordingAnalyticsTransport()
