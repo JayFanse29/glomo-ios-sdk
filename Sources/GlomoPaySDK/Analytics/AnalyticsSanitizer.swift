@@ -9,8 +9,6 @@ enum AnalyticsSanitizer {
         "distinct_id",
         "$device_id",
         "resource_id",
-        "public_key",
-        "sdk_version",
     ]
     /// Device and host-app metadata whose formats the SDK does not control - a host
     /// app's version can legitimately be `1.4.0-20261001` - and which cannot carry customer data.

@@ -85,10 +85,11 @@ required: left unset, Sentry treats the Cocoa platform as `auto` and stores the 
 The privacy manifest declares coarse location for analytics and app functionality.
 
 Each event is tagged `order_id` with the checkout's order id (or subscription id), the same value
-analytics sends, so it can be joined to backend logs. When events are discarded (rate limited,
-over the in-flight bound, a 5xx or a transport failure), the next event that goes out carries
-the count as `extra.dropped_since_last_send`, so a quiet project can be told apart from one whose
-reports are being thrown away. The HTTP body is gzip-compressed (`Content-Encoding: gzip`).
+analytics sends as `resource_id`, so it can be joined to backend logs. When events are discarded
+(rate limited, over the in-flight bound, a 5xx or a transport failure), the next event that goes
+out carries the count as `extra.dropped_since_last_send`, so a quiet project can be told apart
+from one whose reports are being thrown away. The HTTP body is gzip-compressed
+(`Content-Encoding: gzip`).
 
 Events identify as `glomo-ios-sdk/<SDK version>`, with `release` `glomo-ios-sdk@<SDK version>`
 and `environment` `glomo-ios-sdk`, so Sentry releases track the SDK version, not the host app's.

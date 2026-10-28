@@ -135,11 +135,9 @@ final class AnalyticsSanitizerTests: XCTestCase {
     func testIdentifierAndJoinFieldsComeThroughVerbatim() {
         let input: [String: Any?] = [
             "resource_id": "order_6af743563",
-            "public_key": "live_pk_1234567890abcdef",
             "journey_id": "01d245ac-f936-4545-9013-7114243e312f",
             "distinct_id": "$device:01d245ac-f936-4545-9013-7114243e312f",
             "$insert_id": "c1a9e4a2-3b51-4d3c-8b2e-123456789012",
-            "sdk_version": "1.0.0",
             "payment_id": "pay_1234567890",
         ]
 
@@ -148,6 +146,16 @@ final class AnalyticsSanitizerTests: XCTestCase {
         for (key, value) in input {
             XCTAssertEqual(output[key] as? String, value as? String, key)
         }
+    }
+
+    func testPublicKeyAndSDKVersionGoThroughValueMasking() {
+        let output = AnalyticsSanitizer.properties([
+            "public_key": "live_pk_1234567890abcdef someone@example.com",
+            "sdk_version": "1.0.0 build 9876543210",
+        ])
+
+        XCTAssertEqual(output["public_key"] as? String, "live_pk_1234567890abcdef s•••@example.com")
+        XCTAssertEqual(output["sdk_version"] as? String, "1.0.0 build ••••3210")
     }
 
     func testIdentifierValuesAreCappedAtOneThousandCharacters() {

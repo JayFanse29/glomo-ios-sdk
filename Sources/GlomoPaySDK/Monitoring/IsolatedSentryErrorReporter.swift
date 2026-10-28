@@ -23,7 +23,7 @@ final class IsolatedSentryErrorReporter: SDKErrorReporting, @unchecked Sendable 
     private var breadcrumbs: [[String: Any]] = []
 
     /// `orderID` is the checkout's order (or subscription) id, the same value analytics sends as
-    /// `order_id`. It is sent as the `order_id` tag because it is the key that joins a Sentry
+    /// `resource_id`. It is sent as the `order_id` tag because it is the key that joins a Sentry
     /// event to backend logs.
     init(
         client: SentryEnvelopeClient,
