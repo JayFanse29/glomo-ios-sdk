@@ -62,8 +62,9 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
         errorReporter.addBreadcrumb(category: "analytics", message: event, data: ["event_name": event])
         let date = now()
         let state = lock.glomoWithLock { (flowType, networkSnapshotProperties) }
-        var common = deviceProperties()
-        common.merge(state.1) { _, snapshotValue in snapshotValue }
+        var common = state.1
+        common.merge(properties) { _, new in new }
+        common.merge(deviceProperties()) { _, new in new }
         common.merge([
             "integration": AnalyticsCatalogue.integration,
             "platform": AnalyticsCatalogue.platform,
@@ -83,7 +84,6 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
         if let keyMode = Self.keyMode(publicKey: config.publicKey) {
             common["key_mode"] = keyMode
         }
-        common.merge(properties) { _, new in new }
         cacheNetworkSnapshot(from: properties)
         let sanitizedProperties = AnalyticsSanitizer.properties(common)
         let analyticsEvent = AnalyticsEvent(

@@ -56,6 +56,45 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         }
     }
 
+    func testStandardPropertiesWinOverCallSiteKeys() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let tracker = makeTracker(
+            transport: transport,
+            deviceProperties: { ["$os": "iOS", "$model": "iPhone18,3"] }
+        )
+
+        tracker.track(AnalyticsEventName.sdkActionSubmitted, properties: [
+            "action_name": "bank_redirect",
+            "integration": "web",
+            "platform": "web",
+            "sdk_version": "9.9.9",
+            "public_key": "live_other",
+            "dev_mode": true,
+            "key_mode": "live",
+            "resource_id": "order_other",
+            "journey": "lrs",
+            "journey_id": "other-journey",
+            "distinct_id": "other-user",
+            "$os": "Android",
+            "$model": "Pixel 8",
+        ])
+
+        let properties = try await transport.nextEvent().jsonProperties
+        XCTAssertEqual(properties["action_name"] as? String, "bank_redirect")
+        XCTAssertEqual(properties["integration"] as? String, "ios_sdk")
+        XCTAssertEqual(properties["platform"] as? String, "ios")
+        XCTAssertEqual(properties["sdk_version"] as? String, "1.0.0")
+        XCTAssertEqual(properties["public_key"] as? String, "test_public_key")
+        XCTAssertEqual(properties["dev_mode"] as? Bool, false)
+        XCTAssertEqual(properties["key_mode"] as? String, "test")
+        XCTAssertEqual(properties["resource_id"] as? String, "order_123")
+        XCTAssertEqual(properties["journey"] as? String, "standard")
+        XCTAssertEqual(properties["journey_id"] as? String, "session-uuid")
+        XCTAssertEqual(properties["distinct_id"] as? String, "$device:session-uuid")
+        XCTAssertEqual(properties["$os"] as? String, "iOS")
+        XCTAssertEqual(properties["$model"] as? String, "iPhone18,3")
+    }
+
     func testLiveKeysReportLiveKeyMode() async throws {
         let transport = RecordingAnalyticsTransport()
         let tracker = makeTracker(
