@@ -1,0 +1,119 @@
+{
+  "description": "RFC-4 section 9.1 masking, shared by the native SDKs. Each case runs input through the analytics sanitizer; every expected key must come out with exactly that value and every absent key must be missing.",
+  "cases": [
+    {
+      "name": "sensitive key with a whole email value keeps the email shape",
+      "input": {
+        "customer_email": "user@example.com",
+        "customerEmail": "user@example.com"
+      },
+      "expected": {
+        "customer_email": "u•••@example.com",
+        "customerEmail": "u•••@example.com"
+      }
+    },
+    {
+      "name": "sensitive key with free text is masked, not dropped",
+      "input": { "customer_name": "Asha Rao", "email_id": "abc123" },
+      "expected": { "customer_name": "•••", "email_id": "•••" }
+    },
+    {
+      "name": "sensitive key with an account number keeps the last four",
+      "input": { "account_number": "123456789012", "account_no": 123456789012 },
+      "expected": { "account_number": "••••9012", "account_no": "••••9012" }
+    },
+    {
+      "name": "sensitive key with a Luhn card number",
+      "input": { "card_number": "4111 1111 1111 1111" },
+      "expected": { "card_number": "XXXX-XXXX-XXXX-1111" }
+    },
+    {
+      "name": "sensitive key with a tax PAN keeps the last four",
+      "input": { "pan": "ABCDE1234F" },
+      "expected": { "pan": "XXXXXX234F" }
+    },
+    {
+      "name": "key rule matches whole tokens only",
+      "input": {
+        "company_type": "pvt_ltd",
+        "panel_id": "p_1",
+        "discard_reason": "duplicate",
+        "payment_id": "pay_123"
+      },
+      "expected": {
+        "company_type": "pvt_ltd",
+        "panel_id": "p_1",
+        "discard_reason": "duplicate",
+        "payment_id": "pay_123"
+      }
+    },
+    {
+      "name": "taxonomy keys are exempt from the key rule",
+      "input": {
+        "page_name": "checkout",
+        "cta_name": "retry",
+        "action_name": "bank_redirect",
+        "control_name": "color_scheme"
+      },
+      "expected": {
+        "page_name": "checkout",
+        "cta_name": "retry",
+        "action_name": "bank_redirect",
+        "control_name": "color_scheme"
+      }
+    },
+    {
+      "name": "booleans skip the key rule",
+      "input": { "has_email": true },
+      "expected": { "has_email": true }
+    },
+    {
+      "name": "value rules apply to strings under any key",
+      "input": {
+        "note": "mail user@example.com now",
+        "detail": "4111111111111111",
+        "reference": "9876543210",
+        "tax_ref": "ABCDE1234F",
+        "document_ref": "N1234567",
+        "electoral_ref": "ABC1234567"
+      },
+      "expected": {
+        "note": "mail u•••@example.com now",
+        "detail": "XXXX-XXXX-XXXX-1111",
+        "reference": "••••3210",
+        "tax_ref": "XXXXXX234F",
+        "document_ref": "•••",
+        "electoral_ref": "•••"
+      }
+    },
+    {
+      "name": "no six-digit catch-all, no Luhn-failing card, numbers never pattern-matched",
+      "input": {
+        "short_ref": "1234567",
+        "non_luhn_ref": "4111111111111112",
+        "amount": 9876543210
+      },
+      "expected": {
+        "short_ref": "1234567",
+        "non_luhn_ref": "4111111111111112",
+        "amount": 9876543210
+      }
+    },
+    {
+      "name": "a value that is wholly a UUID is untouched",
+      "input": { "request_id": "01d245ac-f936-4545-9013-7114243e312f" },
+      "expected": { "request_id": "01d245ac-f936-4545-9013-7114243e312f" }
+    },
+    {
+      "name": "non-scalar values are dropped",
+      "input": { "errors": ["a"], "payload": { "k": "v" }, "kept": "yes" },
+      "expected": { "kept": "yes" },
+      "absent": ["errors", "payload"]
+    },
+    {
+      "name": "reserved device keys are exempt",
+      "input": { "$app_name": "Wallet (1234567)", "$model": "iPhone15,2" },
+      "expected": { "$app_name": "Wallet (1234567)", "$model": "iPhone15,2" }
+    }
+  ]
+}

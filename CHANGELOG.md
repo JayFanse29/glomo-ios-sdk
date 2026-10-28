@@ -23,10 +23,11 @@ public API changes require a new major release.
 
 ### Changed
 
+- Analytics events now follow Glomo's unified naming; no API, callback or configuration change.
 - Analytics events now carry `journey_id`, and the anonymous Mixpanel identity is now the per-open
   journey id (`$device:<journey_id>`) instead of `order_id`. A new `sdk_loaded` event marks each
   checkout invocation, before validation and device checks; refused opens are reported by
-  `SDK Validation Failed` / `Device Compliance Blocked`.
+  `sdk_checkout_failed`.
 - The checkout and carousel WebViews now have their `overrideUserInterfaceStyle` pinned to the
   scheme the checkout resolved. `WKWebView` reports `prefers-color-scheme` from its trait
   collection, which inherits the host app, so without this a page told `dark` would still match
