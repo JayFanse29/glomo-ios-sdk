@@ -9,6 +9,8 @@ enum AnalyticsSanitizer {
         "distinct_id",
         "$device_id",
         "resource_id",
+        "public_key",
+        "sdk_version",
     ]
     /// Device and host-app metadata whose formats the SDK does not control - a host
     /// app's version can legitimately be `1.4.0-20261001` - and which cannot carry customer data.
@@ -27,7 +29,7 @@ enum AnalyticsSanitizer {
         "page_name", "cta_name", "action_name", "control_name", "error_code", "error_detail",
         "trigger", "status", "webview_type", "permission", "request_source", "last_step",
         "page_event", "payment_event", "api_path", "integration", "platform", "journey",
-        "key_mode", "dev_mode", "public_key", "sdk_version",
+        "key_mode", "dev_mode", "step_name", "otp_channel", "failure_reason",
     ]
     private static let boundedDigits = "(?<![A-Za-z0-9_])(?:\\d[ -]?){%d,%d}\\d(?![A-Za-z0-9_])"
     private static let valueRules: [(expression: NSRegularExpression?, mask: (String) -> String?)] = [

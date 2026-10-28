@@ -70,7 +70,6 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
             "sdk_version": sdkVersion,
             "public_key": config.publicKey,
             "dev_mode": SDKBuildFlags.internalBuild,
-            "key_mode": ConfigManager.isTestOrMock(config.publicKey) ? "test" : "live",
             "resource_id": config.checkoutId,
             "time": Int64(date.timeIntervalSince1970 * 1_000),
             "journey_id": sessionID,
@@ -80,6 +79,9 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
         ]) { _, new in new }
         if let journey = Self.journey(flowType: state.0, isSubscription: config.isSubscription) {
             common["journey"] = journey
+        }
+        if let keyMode = Self.keyMode(publicKey: config.publicKey) {
+            common["key_mode"] = keyMode
         }
         common.merge(properties) { _, new in new }
         cacheNetworkSnapshot(from: properties)
@@ -100,6 +102,12 @@ final class MixpanelAnalyticsTracker: AnalyticsTracking {
                 )
             }
         }
+    }
+
+    private static func keyMode(publicKey: String) -> String? {
+        if publicKey.hasPrefix("live_") { return "live" }
+        if publicKey.hasPrefix("test_") || publicKey.hasPrefix("mock_") { return "test" }
+        return nil
     }
 
     private static func journey(flowType: String, isSubscription: Bool) -> String? {

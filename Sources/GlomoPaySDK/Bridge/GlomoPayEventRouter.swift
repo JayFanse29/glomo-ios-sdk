@@ -56,7 +56,7 @@ final class GlomoPayEventRouter {
                   let url = URL(string: rawURL) else {
                 let scheme = (envelope["url"] as? String)
                     .flatMap { URLComponents(string: $0)?.scheme?.lowercased() } ?? "none"
-                analytics.trackActionFailed(.navigation(.invalidWindowOpenURL, scheme: scheme, webViewType: .bridge))
+                analytics.trackActionFailed(.navigation(.invalidWindowOpenURL, scheme: scheme, webViewType: .main))
                 // A page sending an unusable window.open URL is a contract break, not noise:
                 // Flutter drops it silently and that is the part not worth copying.
                 errorReporter.capture(

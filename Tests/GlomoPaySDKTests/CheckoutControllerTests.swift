@@ -426,6 +426,27 @@ final class CheckoutControllerTests: XCTestCase {
         XCTAssertEqual(listener.terminations, [.programmatic])
     }
 
+    func testCheckoutIsViewedOncePerJourneyAndLaterFailuresAreActionFailures() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let controller = makeController(autoClose: false, analyticsTransport: transport)
+        let main = try XCTUnwrap(webViews(in: controller.view).first)
+        let offline = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet, userInfo: nil)
+
+        controller.eventRouter.handle(envelope: ["type": "bridge.ready"])
+        controller.webView(main, didFailProvisionalNavigation: nil, withError: offline)
+        try tap(GlomoPayStrings.retry, in: controller)
+        controller.eventRouter.handle(envelope: ["type": "bridge.ready"])
+        controller.webView(main, didFailProvisionalNavigation: nil, withError: offline)
+
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkActionFailed, count: 2)
+        try await settle()
+        let viewed = await transport.allEvents(named: AnalyticsEventName.sdkPageViewed)
+        let failed = await transport.allEvents(named: AnalyticsEventName.sdkCheckoutFailed)
+
+        XCTAssertEqual(pageNames(of: viewed).filter { $0 == "checkout" }.count, 1)
+        XCTAssertFalse(failed.contains { $0.jsonProperties["error_code"] as? String == "connection_error" })
+    }
+
     func testUserDismissOnTheSpinnerIsAUserDismissCloseOnTheLoadingPage() async throws {
         let transport = RecordingAnalyticsTransport()
         let controller = makeController(analyticsTransport: transport)
@@ -594,6 +615,7 @@ final class CheckoutControllerTests: XCTestCase {
 
         let properties = try XCTUnwrap(api.first).jsonProperties
         XCTAssertEqual(properties["status"] as? String, "succeeded")
+        XCTAssertEqual(properties["http_status"] as? Int64, 200)
         XCTAssertEqual(properties["api_path"] as? String, "/api/public/v1/order/:order_id")
         XCTAssertEqual(properties["journey"] as? String, "standard")
         XCTAssertNil(properties["error_code"])

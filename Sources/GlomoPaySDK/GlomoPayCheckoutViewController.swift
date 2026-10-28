@@ -60,6 +60,8 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
     /// The carousel URL the SDK loaded, kept so a page-finished can be matched to its origin.
     private var carouselURL: URL?
     private var didStartCheckout = false
+    private var didShowCheckout = false
+    private var isDisappearingInteractively = false
     private var openFunnel = CheckoutOpenFunnel()
     private var openWatchdog: Task<Void, Never>?
     private var renderWatchdog: Task<Void, Never>?
@@ -166,9 +168,17 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         }
     }
 
+    public override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        isDisappearingInteractively = transitionCoordinator?.isInteractive == true
+    }
+
     public override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         progressObservation?.invalidate()
+        guard !didTerminate, !isDisappearingInteractively,
+              isBeingDismissed || navigationController?.isBeingDismissed == true else { return }
+        analytics.trackCheckoutClosed(.merchant, page: visiblePage)
     }
 
     deinit {
@@ -299,6 +309,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
 
     private func advanceOpenStep(_ step: CheckoutOpenStep) {
         guard openFunnel.advance(step), step == .bridgeReady else { return }
+        didShowCheckout = true
         analytics.trackPageViewed(.checkout)
     }
 
@@ -330,8 +341,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                     failedURL: self.currentURL,
                     shouldAutoClose: false
                 ),
-                as: .connectionError,
-                isReported: true
+                page: .openTimeout
             )
         }
     }
@@ -439,12 +449,12 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         }
 
         do {
-            let order = try await apiClient.fetchOrder(config.orderId!)
-            let type = ConfigManager.detectOrderType(order)
+            let response = try await apiClient.fetchOrderResponse(config.orderId!)
+            let type = ConfigManager.detectOrderType(response.order)
             flowTypeState.resolve(type)
             analytics.updateFlowType(type)
             errorReporter.updateFlowType(type)
-            analytics.trackOrderFetchSucceeded()
+            analytics.trackOrderFetchSucceeded(httpStatus: response.statusCode)
             return type
         } catch {
             let reason = Self.orderFetchFailureReason(error)
@@ -640,7 +650,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                 ))
                 showFlowError(error, as: .httpError)
             } else {
-                deliverConnectionError(error, as: .httpError)
+                deliverConnectionError(error, page: .httpError, failure: .httpError)
             }
         }
         decisionHandler(.allow)
@@ -701,7 +711,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             failedURL: url,
             domain: nsError.domain
         )
-        deliverConnectionError(connectionError, as: .connectionError)
+        deliverConnectionError(connectionError, page: .connectionError, failure: .connectionError)
     }
 
     private func openFlow(_ url: URL) {
@@ -1153,7 +1163,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
             panel.bottomAnchor.constraint(equalTo: flow.bottomAnchor),
         ])
         flowErrorView = panel
-        analytics.trackPageViewed(.error, errorCode: failure)
+        analytics.trackPageViewed(.error, errorCode: AnalyticsErrorPageCode(failure))
     }
 
     @objc private func flowRetryTapped() {
@@ -1244,18 +1254,18 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
     }
 
     private func showConnectionError(_ error: ConnectionError) async {
-        await MainActor.run { self.deliverConnectionError(error, as: .connectionError, isReported: true) }
+        await MainActor.run { self.deliverConnectionError(error, page: .other) }
     }
 
     private func deliverConnectionError(
         _ error: ConnectionError,
-        as failure: AnalyticsLoadError,
-        isReported: Bool = false
+        page: AnalyticsErrorPageCode,
+        failure: AnalyticsLoadError? = nil
     ) {
         guard !didTerminate else { return }
         loadingView.isHidden = true
         progressView.isHidden = true
-        if !isReported { trackConnectionFailure(error, as: failure) }
+        if let failure { trackConnectionFailure(error, as: failure) }
         errorReporter.capture(
             operation: "webview_connection",
             error: error,
@@ -1266,12 +1276,12 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
         if config.autoCloseOnConnectionError && error.shouldAutoClose {
             terminate(source: .connectionError)
         } else {
-            analytics.trackPageViewed(.error, errorCode: failure)
+            analytics.trackPageViewed(.error, errorCode: page)
         }
     }
 
     private func trackConnectionFailure(_ error: ConnectionError, as failure: AnalyticsLoadError) {
-        guard openFunnel.didOpen else {
+        guard didShowCheckout else {
             analytics.trackCheckoutFailed(.connectionError(AnalyticsConnectionFailure(error)))
             return
         }
@@ -1477,8 +1487,7 @@ public final class GlomoPayCheckoutViewController: UIViewController, WKNavigatio
                     message: "The checkout WebView stopped unexpectedly.",
                     failedURL: currentURL
                 ),
-                as: .contentProcessTerminated,
-                isReported: true
+                page: .contentProcessTerminated
             )
         }
     }

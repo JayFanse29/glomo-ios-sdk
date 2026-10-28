@@ -22,6 +22,8 @@ final class AnalyticsCatalogueTests: XCTestCase {
         )
         XCTAssertEqual(AnalyticsCTAName.allCases.map(\.rawValue), ["retry", "back_to_checkout"])
         XCTAssertEqual(AnalyticsCloseTrigger.allCases.map(\.rawValue), ["user_dismiss", "merchant", "sdk"])
+        XCTAssertEqual(Set(AnalyticsErrorPageCode.allCases.map(\.rawValue)), Self.errorPageCodes)
+        XCTAssertEqual(AnalyticsWebViewType.allCases.map(\.rawValue), ["main", "flow"])
         XCTAssertTrue(Set(AnalyticsActionName.allCases.map(\.rawValue)).isSubset(of: Self.errorCodesByAction.keys))
         XCTAssertTrue(Set(AnalyticsPaymentEvent.allCases.map(\.rawValue)).isSubset(of: Self.paymentEvents))
         XCTAssertTrue(Set(AnalyticsAPIError.allCases.map(\.rawValue)).isSubset(of: Self.apiErrorCodes))
@@ -59,7 +61,7 @@ final class AnalyticsCatalogueTests: XCTestCase {
             switch event.name {
             case AnalyticsEventName.sdkPageViewed:
                 XCTAssertTrue(Self.viewablePages.contains(properties["page_name"] as? String ?? ""), context)
-                if let errorCode { XCTAssertTrue(Self.errorCodesByAction["webview_load"]!.contains(errorCode), context) }
+                if let errorCode { XCTAssertTrue(Self.errorPageCodes.contains(errorCode), context) }
             case AnalyticsEventName.sdkAPIBackend:
                 XCTAssertEqual(properties["api_path"] as? String, "/api/public/v1/order/:order_id", context)
                 XCTAssertEqual(properties["http_method"] as? String, "GET", context)
@@ -97,10 +99,10 @@ final class AnalyticsCatalogueTests: XCTestCase {
         for page in [AnalyticsPageName.checkout, .bankRedirect, .educationCarousel] {
             analytics.trackPageViewed(page, urlOrigin: "https://bank.example")
         }
-        for error in AnalyticsLoadError.allCases {
-            analytics.trackPageViewed(.error, errorCode: error)
+        for code in AnalyticsErrorPageCode.allCases {
+            analytics.trackPageViewed(.error, errorCode: code)
         }
-        analytics.trackOrderFetchSucceeded()
+        analytics.trackOrderFetchSucceeded(httpStatus: 200)
         for error in AnalyticsAPIError.allCases {
             analytics.trackOrderFetchFailed(error, httpStatus: 500)
         }
@@ -181,6 +183,9 @@ final class AnalyticsCatalogueTests: XCTestCase {
     }
 
     private static let viewablePages: Set<String> = ["checkout", "bank_redirect", "education_carousel", "error"]
+    private static let errorPageCodes: Set<String> = [
+        "connection_error", "http_error", "webview_error", "content_process_terminated", "open_timeout", "other",
+    ]
     private static let paymentEvents: Set<String> = [
         "payment_success", "payment_failure", "payment_pending", "bank_transfer_submitted",
     ]

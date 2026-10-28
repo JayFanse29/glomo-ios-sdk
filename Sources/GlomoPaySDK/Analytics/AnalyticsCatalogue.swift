@@ -23,9 +23,11 @@ enum AnalyticsCatalogue {
             return event
         case AnalyticsEventName.sdkCheckoutFailed:
             return "\(event):\(stringValue(properties["error_code"] ?? nil) ?? "")"
-        case AnalyticsEventName.sdkPageViewed
-            where stringValue(properties["page_name"] ?? nil) == AnalyticsPageName.educationCarousel.rawValue:
-            return "\(event):\(AnalyticsPageName.educationCarousel.rawValue)"
+        case AnalyticsEventName.sdkPageViewed:
+            let page = stringValue(properties["page_name"] ?? nil)
+            guard page == AnalyticsPageName.checkout.rawValue || page == AnalyticsPageName.educationCarousel.rawValue
+            else { return nil }
+            return "\(event):\(page ?? "")"
         default:
             return nil
         }
@@ -72,13 +74,29 @@ enum AnalyticsPaymentEvent: String, CaseIterable {
 enum AnalyticsWebViewType: String, CaseIterable {
     case main
     case flow
-    case bridge
 }
 
 enum AnalyticsLoadError: String, CaseIterable {
     case connectionError = "connection_error"
     case httpError = "http_error"
     case contentProcessTerminated = "content_process_terminated"
+}
+
+enum AnalyticsErrorPageCode: String, CaseIterable {
+    case connectionError = "connection_error"
+    case httpError = "http_error"
+    case webViewError = "webview_error"
+    case contentProcessTerminated = "content_process_terminated"
+    case openTimeout = "open_timeout"
+    case other
+
+    init(_ failure: AnalyticsLoadError) {
+        switch failure {
+        case .connectionError: self = .connectionError
+        case .httpError: self = .httpError
+        case .contentProcessTerminated: self = .contentProcessTerminated
+        }
+    }
 }
 
 enum AnalyticsNavigationError: String, CaseIterable {
@@ -290,7 +308,7 @@ extension AnalyticsTracking {
         track(AnalyticsEventName.sdkLoaded, properties: [:])
     }
 
-    func trackPageViewed(_ page: AnalyticsPageName, urlOrigin: String? = nil, errorCode: AnalyticsLoadError? = nil) {
+    func trackPageViewed(_ page: AnalyticsPageName, urlOrigin: String? = nil, errorCode: AnalyticsErrorPageCode? = nil) {
         track(AnalyticsEventName.sdkPageViewed, properties: present([
             "page_name": page.rawValue,
             "url_origin": urlOrigin,
@@ -298,11 +316,12 @@ extension AnalyticsTracking {
         ]))
     }
 
-    func trackOrderFetchSucceeded() {
+    func trackOrderFetchSucceeded(httpStatus: Int) {
         track(AnalyticsEventName.sdkAPIBackend, properties: [
             "api_path": AnalyticsCatalogue.orderAPIPath,
             "http_method": "GET",
             "status": "succeeded",
+            "http_status": httpStatus,
         ])
     }
 

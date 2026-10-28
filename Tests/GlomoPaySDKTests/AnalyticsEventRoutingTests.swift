@@ -179,7 +179,7 @@ final class AnalyticsEventRoutingTests: XCTestCase {
         XCTAssertTrue(failures.allSatisfy {
             $0.properties["action_name"] as? String == "navigation"
                 && $0.properties["error_code"] as? String == "invalid_window_open_url"
-                && $0.properties["webview_type"] as? String == "bridge"
+                && $0.properties["webview_type"] as? String == "main"
         })
         let pageView = analytics.events.last
         XCTAssertEqual(pageView?.name, AnalyticsEventName.sdkPageViewed)

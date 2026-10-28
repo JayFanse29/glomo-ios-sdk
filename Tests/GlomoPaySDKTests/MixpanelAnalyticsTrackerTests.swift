@@ -69,6 +69,19 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         XCTAssertEqual(properties["key_mode"] as? String, "live")
     }
 
+    func testUnknownKeyPrefixLeavesKeyModeUnset() async throws {
+        let transport = RecordingAnalyticsTransport()
+        let tracker = makeTracker(
+            config: GlomoPayConfig(publicKey: "pk_without_prefix", orderId: "order_123"),
+            transport: transport
+        )
+
+        tracker.trackPageViewed(.checkout)
+
+        let properties = try await transport.nextEvent().jsonProperties
+        XCTAssertNil(properties["key_mode"])
+    }
+
     func testSubscriptionIsTheResourceAndTheJourneyButNotTheMixpanelIdentity() async throws {
         let transport = RecordingAnalyticsTransport()
         let tracker = makeTracker(
@@ -111,8 +124,8 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         let transport = RecordingAnalyticsTransport()
         let tracker = makeTracker(transport: transport)
 
-        tracker.trackPageViewed(.checkout)
-        tracker.trackPageViewed(.checkout)
+        tracker.trackPageViewed(.bankRedirect)
+        tracker.trackPageViewed(.bankRedirect)
 
         let first = try await transport.nextEvent().jsonProperties["$insert_id"] as? String
         let second = try await transport.nextEvent().jsonProperties["$insert_id"] as? String
@@ -137,8 +150,10 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
         tracker.trackCheckoutFailed(.dependenciesFailedToLoad)
         tracker.trackPageViewed(.checkout)
         tracker.trackPageViewed(.checkout)
+        tracker.trackPageViewed(.bankRedirect)
+        tracker.trackPageViewed(.bankRedirect)
 
-        _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkPageViewed, count: 3)
+        _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkPageViewed, count: 4)
         _ = try await transport.waitForEvents(named: AnalyticsEventName.sdkCheckoutFailed, count: 2)
         try await Task.sleep(nanoseconds: 300_000_000)
         let loaded = await transport.allEvents(named: AnalyticsEventName.sdkLoaded)
@@ -151,8 +166,8 @@ final class MixpanelAnalyticsTrackerTests: XCTestCase {
             ["open_timeout", "dependencies_failed_to_load"]
         )
         XCTAssertEqual(failed.count, 2)
-        XCTAssertEqual(viewed.map { $0.jsonProperties["page_name"] as? String }.filter { $0 == "education_carousel" }.count, 1)
-        XCTAssertEqual(viewed.count, 3)
+        let pages = viewed.map { $0.jsonProperties["page_name"] as? String ?? "" }
+        XCTAssertEqual(pages.sorted(), ["bank_redirect", "bank_redirect", "checkout", "education_carousel"])
         XCTAssertEqual(closed.count, 1)
     }
 

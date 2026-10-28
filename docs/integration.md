@@ -33,10 +33,10 @@ The implementation sends the shared native SDK event contract directly to
   to the user.
 - `integration` is `ios_sdk` and `platform` is `ios` on every event.
 - `resource_id` is the order ID, or the subscription ID for subscription checkouts. `journey` is
-  `standard`, `lrs` or `subscription` once the order type is known, and `key_mode` is `test` or
-  `live` from the public key.
-- `sdk_loaded` and `sdk_checkout_closed` are sent once per checkout invocation, and
-  `sdk_checkout_failed` once per `error_code`.
+  `standard`, `lrs` or `subscription` once the order type is known. `key_mode` is `live` for a
+  `live_` key and `test` for a `test_` or `mock_` key, and is omitted otherwise.
+- `sdk_loaded`, `sdk_page_viewed` with `page_name: checkout` and `sdk_checkout_closed` are sent
+  once per checkout invocation, and `sdk_checkout_failed` once per `error_code`.
 - `$insert_id` is a fresh lowercase UUID on every event, so Mixpanel never deduplicates two
   distinct events.
 - Requests are asynchronous, have a 10-second timeout, and do not retry.
