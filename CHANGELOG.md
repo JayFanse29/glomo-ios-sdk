@@ -24,6 +24,9 @@ public API changes require a new major release.
 ### Changed
 
 - Analytics events now follow Glomo's unified naming; no API, callback or configuration change.
+- The privacy manifest no longer declares performance data: the SDK stopped sending the device
+  performance snapshot to analytics, and the Sentry client never collected it. Nothing to
+  configure.
 - Analytics events now carry `journey_id`, and the anonymous Mixpanel identity is now the per-open
   journey id (`$device:<journey_id>`) instead of `order_id`. A new `sdk_loaded` event marks each
   checkout invocation, before validation and device checks; refused opens are reported by

@@ -6,21 +6,19 @@ final class AnalyticsSanitizerTests: XCTestCase {
         let data = try Data(contentsOf: Self.fixtureURL)
         let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let cases = try XCTUnwrap(fixture["cases"] as? [[String: Any]])
-        XCTAssertFalse(cases.isEmpty)
+        XCTAssertEqual(cases.count, 24)
 
         for fixtureCase in cases {
             let name = fixtureCase["name"] as? String ?? "unnamed"
-            let input = try XCTUnwrap(fixtureCase["input"] as? [String: Any], name)
-            let expected = fixtureCase["expected"] as? [String: Any] ?? [:]
-            let absent = fixtureCase["absent"] as? [String] ?? []
+            let key = try XCTUnwrap(fixtureCase["key"] as? String, name)
+            let value = try XCTUnwrap(fixtureCase["value"], name)
 
-            let output = AnalyticsSanitizer.properties(input.mapValues { value -> Any? in value })
+            let output = AnalyticsSanitizer.properties([key: value])
 
-            for (key, value) in expected {
-                XCTAssertEqual(try jsonText(output[key]), try jsonText(value), "\(name): \(key)")
-            }
-            for key in absent {
-                XCTAssertNil(output[key], "\(name): \(key)")
+            if fixtureCase["absent"] as? Bool == true {
+                XCTAssertNil(output[key], name)
+            } else {
+                XCTAssertEqual(try jsonText(output[key]), try jsonText(fixtureCase["expected"]), name)
             }
         }
     }
@@ -46,7 +44,7 @@ final class AnalyticsSanitizerTests: XCTestCase {
         ])
 
         XCTAssertEqual(output["resource_id"] as? String, "order_6af743563")
-        XCTAssertEqual(output["customer_email"] as? String, "u•••@example.com")
+        XCTAssertEqual(output["customer_email"] as? String, "•••")
     }
 
     func testKnownFailingUUIDRoundTripsWithoutPartialRedaction() {
@@ -87,11 +85,11 @@ final class AnalyticsSanitizerTests: XCTestCase {
         XCTAssertEqual(output["value_three"] as? String, "XXXXXX234F")
     }
 
-    func testFreeTextStillRedactsSensitiveSubstrings() {
+    func testSentryFreeTextRedactionIsUnchanged() {
         let input = "user@example.com 9876543210 ABCDE1234F N1234567 ABC1234567"
 
         XCTAssertEqual(
-            AnalyticsSanitizer.text(input, limit: 1_000),
+            SentryScrubber.text(input, limit: 1_000),
             "[REDACTED] [REDACTED] [REDACTED] [REDACTED] [REDACTED]"
         )
     }

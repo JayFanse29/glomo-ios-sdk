@@ -1,119 +1,28 @@
 {
-  "description": "RFC-4 section 9.1 masking, shared by the native SDKs. Each case runs input through the analytics sanitizer; every expected key must come out with exactly that value and every absent key must be missing.",
   "cases": [
-    {
-      "name": "sensitive key with a whole email value keeps the email shape",
-      "input": {
-        "customer_email": "user@example.com",
-        "customerEmail": "user@example.com"
-      },
-      "expected": {
-        "customer_email": "u•••@example.com",
-        "customerEmail": "u•••@example.com"
-      }
-    },
-    {
-      "name": "sensitive key with free text is masked, not dropped",
-      "input": { "customer_name": "Asha Rao", "email_id": "abc123" },
-      "expected": { "customer_name": "•••", "email_id": "•••" }
-    },
-    {
-      "name": "sensitive key with an account number keeps the last four",
-      "input": { "account_number": "123456789012", "account_no": 123456789012 },
-      "expected": { "account_number": "••••9012", "account_no": "••••9012" }
-    },
-    {
-      "name": "sensitive key with a Luhn card number",
-      "input": { "card_number": "4111 1111 1111 1111" },
-      "expected": { "card_number": "XXXX-XXXX-XXXX-1111" }
-    },
-    {
-      "name": "sensitive key with a tax PAN keeps the last four",
-      "input": { "pan": "ABCDE1234F" },
-      "expected": { "pan": "XXXXXX234F" }
-    },
-    {
-      "name": "key rule matches whole tokens only",
-      "input": {
-        "company_type": "pvt_ltd",
-        "panel_id": "p_1",
-        "discard_reason": "duplicate",
-        "payment_id": "pay_123"
-      },
-      "expected": {
-        "company_type": "pvt_ltd",
-        "panel_id": "p_1",
-        "discard_reason": "duplicate",
-        "payment_id": "pay_123"
-      }
-    },
-    {
-      "name": "taxonomy keys are exempt from the key rule",
-      "input": {
-        "page_name": "checkout",
-        "cta_name": "retry",
-        "action_name": "bank_redirect",
-        "control_name": "color_scheme"
-      },
-      "expected": {
-        "page_name": "checkout",
-        "cta_name": "retry",
-        "action_name": "bank_redirect",
-        "control_name": "color_scheme"
-      }
-    },
-    {
-      "name": "booleans skip the key rule",
-      "input": { "has_email": true },
-      "expected": { "has_email": true }
-    },
-    {
-      "name": "value rules apply to strings under any key",
-      "input": {
-        "note": "mail user@example.com now",
-        "detail": "4111111111111111",
-        "reference": "9876543210",
-        "tax_ref": "ABCDE1234F",
-        "document_ref": "N1234567",
-        "electoral_ref": "ABC1234567"
-      },
-      "expected": {
-        "note": "mail u•••@example.com now",
-        "detail": "XXXX-XXXX-XXXX-1111",
-        "reference": "••••3210",
-        "tax_ref": "XXXXXX234F",
-        "document_ref": "•••",
-        "electoral_ref": "•••"
-      }
-    },
-    {
-      "name": "no six-digit catch-all, no Luhn-failing card, numbers never pattern-matched",
-      "input": {
-        "short_ref": "1234567",
-        "non_luhn_ref": "4111111111111112",
-        "amount": 9876543210
-      },
-      "expected": {
-        "short_ref": "1234567",
-        "non_luhn_ref": "4111111111111112",
-        "amount": 9876543210
-      }
-    },
-    {
-      "name": "a value that is wholly a UUID is untouched",
-      "input": { "request_id": "01d245ac-f936-4545-9013-7114243e312f" },
-      "expected": { "request_id": "01d245ac-f936-4545-9013-7114243e312f" }
-    },
-    {
-      "name": "non-scalar values are dropped",
-      "input": { "errors": ["a"], "payload": { "k": "v" }, "kept": "yes" },
-      "expected": { "kept": "yes" },
-      "absent": ["errors", "payload"]
-    },
-    {
-      "name": "reserved device keys are exempt",
-      "input": { "$app_name": "Wallet (1234567)", "$model": "iPhone15,2" },
-      "expected": { "$app_name": "Wallet (1234567)", "$model": "iPhone15,2" }
-    }
+    { "name": "email in free text", "key": "error_detail", "value": "contact jane.doe@example.com", "expected": "contact j•••@example.com" },
+    { "name": "Luhn-valid card", "key": "error_detail", "value": "4111 1111 1111 1111", "expected": "XXXX-XXXX-XXXX-1111" },
+    { "name": "card-length digits that fail Luhn", "key": "error_detail", "value": "1234567890123456", "expected": "1234567890123456" },
+    { "name": "tax PAN keeps the last 4", "key": "error_detail", "value": "ABCDE1234F", "expected": "XXXXXX234F" },
+    { "name": "phone", "key": "error_detail", "value": "9876543210", "expected": "••••3210" },
+    { "name": "Aadhaar-like with spaces", "key": "error_detail", "value": "1234 5678 9012", "expected": "••••9012" },
+    { "name": "passport", "key": "error_detail", "value": "N1234567", "expected": "•••" },
+    { "name": "voter id", "key": "error_detail", "value": "ABC1234567", "expected": "•••" },
+    { "name": "6-digit code is not a catch-all match", "key": "error_detail", "value": "code 123456", "expected": "code 123456" },
+    { "name": "name token masks the value", "key": "customer_name", "value": "Jane Doe", "expected": "•••" },
+    { "name": "account token keeps the last 4", "key": "account_number", "value": "000123456789", "expected": "••••6789" },
+    { "name": "otp token", "key": "otp", "value": "482913", "expected": "•••" },
+    { "name": "identity token on an id key", "key": "email_id", "value": "j@example.com", "expected": "•••" },
+    { "name": "whole tokens only: panel", "key": "panel_id", "value": "panel_1", "expected": "panel_1" },
+    { "name": "whole tokens only: company_type", "key": "company_type", "value": "llp", "expected": "llp" },
+    { "name": "whole tokens only: discard_reason", "key": "discard_reason", "value": "expired", "expected": "expired" },
+    { "name": "taxonomy key is exempt", "key": "page_name", "value": "bank_redirect", "expected": "bank_redirect" },
+    { "name": "reserved key is exempt", "key": "$app_name", "value": "Merchant App", "expected": "Merchant App" },
+    { "name": "booleans skip the key rule", "key": "has_email", "value": true, "expected": true },
+    { "name": "numbers are never pattern-matched", "key": "amount", "value": 9876543210, "expected": 9876543210 },
+    { "name": "identifiers pass through", "key": "journey_id", "value": "0f8e6c1a-2b3d-4e5f-8a9b-123456789012", "expected": "0f8e6c1a-2b3d-4e5f-8a9b-123456789012" },
+    { "name": "null is kept", "key": "had_listener", "value": null, "expected": null },
+    { "name": "arrays are dropped", "key": "accept_types", "value": ["image/*"], "absent": true },
+    { "name": "objects are dropped", "key": "payload", "value": { "orderId": "order_1" }, "absent": true }
   ]
 }

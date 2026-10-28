@@ -122,7 +122,7 @@ final class GlomoPayEventRouter {
                 errorReporter.capture(
                     operation: "thin_bank_transfer_payload",
                     error: RouterError("Bank transfer payload carried no orderId"),
-                    context: ["keys": AnalyticsSanitizer.schemaKeys(Array(payloadData.keys)).joined(separator: ",")]
+                    context: ["keys": SentryScrubber.schemaKeys(Array(payloadData.keys)).joined(separator: ",")]
                 )
                 return
             }
@@ -139,7 +139,7 @@ final class GlomoPayEventRouter {
                 errorReporter.capture(
                     operation: "thin_payment_failure_payload",
                     error: RouterError("Payment failure payload carried no orderId"),
-                    context: ["keys": AnalyticsSanitizer.schemaKeys(Array(payloadData.keys)).joined(separator: ",")]
+                    context: ["keys": SentryScrubber.schemaKeys(Array(payloadData.keys)).joined(separator: ",")]
                 )
             }
             // Delivered either way: the payload travels as-is in rawResponse.

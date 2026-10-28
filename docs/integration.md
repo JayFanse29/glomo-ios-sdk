@@ -61,8 +61,7 @@ are sent only as an origin (`url_origin`); bank redirect origins keep only `http
 
 The SDK does not collect customer names, email addresses, phone numbers, PAN/card data, bank
 account numbers, or KYC document contents. The bundled `PrivacyInfo.xcprivacy` declares
-product-interaction analytics, SDK diagnostic data, and device performance data, with tracking
-disabled.
+product-interaction analytics, SDK diagnostic data and coarse location, with tracking disabled.
 
 The SDK sends no device performance or device-posture data to analytics.
 

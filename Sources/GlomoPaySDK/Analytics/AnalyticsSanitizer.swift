@@ -56,17 +56,9 @@ enum AnalyticsSanitizer {
         pattern: "^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$",
         options: [.caseInsensitive]
     )
-    private static let freeTextPatterns = [
-        "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
-        "(?<![A-Za-z0-9_])(?:\\d[\\s-]*){6,}(?![A-Za-z0-9_])",
-        "(?<![A-Za-z0-9_])[A-Z]{5}[0-9]{4}[A-Z](?![A-Za-z0-9_])",
-        "(?<![A-Za-z0-9_])[A-Z][0-9]{7}(?![A-Za-z0-9_])",
-        "(?<![A-Za-z0-9_])[A-Z]{3}[0-9]{7}(?![A-Za-z0-9_])",
-    ].compactMap { makeExpression(pattern: $0, options: [.caseInsensitive]) }
-
     static func properties(_ input: [String: Any?]) -> [String: Any] {
         input.reduce(into: [String: Any]()) { output, item in
-            guard let value = item.value else {
+            guard let value = item.value, !(value is NSNull) else {
                 output[item.key] = NSNull()
                 return
             }
@@ -80,7 +72,7 @@ enum AnalyticsSanitizer {
             }
             guard let scalar = scalar(value) else { return }
             if !(scalar is Bool), isSensitiveKey(item.key) {
-                output[item.key] = maskSensitiveValue(scalar)
+                output[item.key] = maskSensitiveValue(scalar, key: item.key)
                 return
             }
             if let string = scalar as? String {
@@ -94,9 +86,11 @@ enum AnalyticsSanitizer {
     static func isSensitiveKey(_ key: String) -> Bool {
         let normalized = snakeCase(key)
         guard !normalized.hasPrefix("$"), !exemptKeys.contains(normalized) else { return false }
-        return normalized
-            .split { !$0.isLetter && !$0.isNumber }
-            .contains { sensitiveKeyTokens.contains(String($0)) }
+        return tokens(of: normalized).contains { sensitiveKeyTokens.contains($0) }
+    }
+
+    private static func tokens(of key: String) -> [String] {
+        snakeCase(key).split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
 
     static func maskValues(in value: String) -> String {
@@ -104,14 +98,6 @@ enum AnalyticsSanitizer {
         return valueRules.reduce(value) { current, rule in
             replaceMatches(of: rule.expression, in: current, using: rule.mask)
         }
-    }
-
-    static func text(_ value: String, limit: Int) -> String {
-        String(redact(value).prefix(limit))
-    }
-
-    static func schemaKeys(_ keys: [String]) -> [String] {
-        keys.filter { !isSensitiveKey($0) }.sorted()
     }
 
     static func urlOrigin(_ url: URL?) -> String? {
@@ -162,15 +148,10 @@ enum AnalyticsSanitizer {
         }
     }
 
-    private static func maskSensitiveValue(_ value: Any) -> String {
-        let text = value as? String ?? "\(value)"
-        for rule in valueRules {
-            guard let match = wholeMatch(of: rule.expression, in: text), let masked = rule.mask(match) else {
-                continue
-            }
-            return masked
-        }
-        return "•••"
+    private static func maskSensitiveValue(_ value: Any, key: String) -> String {
+        let digits = (value as? String ?? "\(value)").filter(\.isNumber)
+        guard tokens(of: key).contains("account"), digits.count >= 4 else { return "•••" }
+        return "••••\(digits.suffix(4))"
     }
 
     private static func maskCard(_ match: String) -> String? {
@@ -222,13 +203,6 @@ enum AnalyticsSanitizer {
         return output
     }
 
-    private static func wholeMatch(of expression: NSRegularExpression?, in value: String) -> String? {
-        guard let expression,
-              let match = expression.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
-              match.range == NSRange(value.startIndex..., in: value) else { return nil }
-        return value
-    }
-
     private static func snakeCase(_ key: String) -> String {
         var output = ""
         var previous: Character?
@@ -251,13 +225,6 @@ enum AnalyticsSanitizer {
 
     private static func isBooleanNumber(_ value: NSNumber) -> Bool {
         CFGetTypeID(value) == CFBooleanGetTypeID()
-    }
-
-    private static func redact(_ value: String) -> String {
-        freeTextPatterns.reduce(value) { current, pattern in
-            let range = NSRange(current.startIndex..., in: current)
-            return pattern.stringByReplacingMatches(in: current, range: range, withTemplate: "[REDACTED]")
-        }
     }
 
     private static func makeExpression(

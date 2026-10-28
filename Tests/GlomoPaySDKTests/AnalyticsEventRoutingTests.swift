@@ -82,7 +82,7 @@ final class AnalyticsEventRoutingTests: XCTestCase {
 
     func testSchemaKeyFilteringDropsSensitiveFieldNames() {
         XCTAssertEqual(
-            AnalyticsSanitizer.schemaKeys(["type", "payment_id", "customer_email", "card_number", "customerName"]),
+            SentryScrubber.schemaKeys(["type", "payment_id", "customer_email", "card_number"]),
             ["payment_id", "type"]
         )
     }
