@@ -6,7 +6,7 @@ final class AnalyticsSanitizerTests: XCTestCase {
         let data = try Data(contentsOf: Self.fixtureURL)
         let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let cases = try XCTUnwrap(fixture["cases"] as? [[String: Any]])
-        XCTAssertEqual(cases.count, 24)
+        XCTAssertEqual(cases.count, 25)
 
         for fixtureCase in cases {
             let name = fixtureCase["name"] as? String ?? "unnamed"

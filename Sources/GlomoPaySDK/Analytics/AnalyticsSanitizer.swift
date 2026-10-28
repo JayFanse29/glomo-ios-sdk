@@ -161,9 +161,7 @@ enum AnalyticsSanitizer {
     }
 
     private static func maskDigits(_ match: String) -> String? {
-        let digits = match.filter(\.isNumber)
-        guard !passesLuhn(digits) else { return nil }
-        return "••••\(digits.suffix(4))"
+        "••••\(match.filter(\.isNumber).suffix(4))"
     }
 
     private static func maskEmail(_ match: String) -> String? {
